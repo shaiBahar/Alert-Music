@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+<title>Music Alert</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<style>
+  :root {
+    --bg:        #0a0e1a;
+    --card:      #111827;
+    --section:   #1a2035;
+    --border:    #2d3748;
+    --accent:    #e63946;
+    --accent2:   #c1121f;
+    --blue:      #4299e1;
+    --text:      #f0f4f8;
+    --muted:     #8899aa;
+    --success:   #48bb78;
+    --warning:   #ed8936;
+    --radius:    10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #1a0a0c 0%, #1e0f12 100%);
+    border-bottom: 1px solid #3d1a1e;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .header-icon { font-size: 26px; }
+  .header-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .header-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+  .status-dot {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--success);
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 12px 8px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: color 0.2s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+  }
+  .badge {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 10px;
+    padding: 1px 6px;
+    min-width: 18px;
+    text-align: center;
+    display: none;
+  }
+  .badge.visible { display: inline-block; }
+
+  /* ── Tab content ── */
+  .tab-content { display: none; flex: 1; overflow: hidden; }
+  .tab-content.active { display: flex; flex-direction: column; }
+
+  /* ══════════════════════════════════════
+     SETTINGS TAB — Light theme
+  ══════════════════════════════════════ */
+  #tab-settings {
+    overflow-y: auto;
+    padding: 16px 18px;
+    gap: 14px;
+    background: #f0f5fb;
+    direction: rtl;
+  }
+  #tab-settings::-webkit-scrollbar { width: 5px; }
+  #tab-settings::-webkit-scrollbar-track { background: #e2eaf4; }
+  #tab-settings::-webkit-scrollbar-thumb { background: #b0bfd0; border-radius: 3px; }
+
+  .section {
+    background: #ffffff;
+    border: 1px solid #dde5f0;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: 0 2px 6px rgba(0,40,100,0.07);
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6b7fa0;
+    margin-bottom: 12px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #3d4f6a;
+    margin-bottom: 5px;
+    margin-top: 10px;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    width: 100%;
+    padding: 9px 12px;
+    background: #f7f9fc;
+    border: 1px solid #c9d4e3;
+    border-radius: 7px;
+    color: #1a2a3a;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    direction: ltr;
+  }
+  input:focus, select:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
+    background: #fff;
+  }
+  input[readonly] {
+    background: #eef3fa;
+    color: #7a8fa8;
+    cursor: default;
+    border-style: dashed;
+  }
+
+  /* Speaker scan */
+  .scan-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    direction: ltr;
+  }
+  .scan-row select { flex: 1; }
+  .btn-scan {
+    padding: 9px 14px;
+    background: var(--blue);
+    border: none;
+    border-radius: 7px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-scan:hover { background: #3182ce; }
+  .btn-scan:disabled { background: #a0b4cc; cursor: not-allowed; }
+  .spinner {
+    width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .btn-scan.scanning .spinner { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .scan-hint {
+    font-size: 11px;
+    color: #8a9ab8;
+    margin-top: 5px;
+  }
+  .scan-hint.warn { color: #c05800; }
+  .scan-hint.ok   { color: #1a7a40; }
+
+  /* Volume slider */
+  .vol-row { display: flex; align-items: center; gap: 10px; direction: ltr; }
+  .vol-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 5px;
+    border-radius: 3px;
+    background: #c9d4e3;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .vol-val {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    width: 36px;
+    text-align: right;
+  }
+
+  /* Hours row */
+  .hours-row { display: flex; gap: 12px; direction: ltr; }
+  .hours-row > div { flex: 1; }
+
+  /* MP3 file picker */
+  .mp3-row { display: flex; gap: 8px; align-items: center; direction: ltr; }
+  .btn-file {
+    padding: 9px 14px;
+    background: #eef3fa;
+    border: 1px solid #c9d4e3;
+    border-radius: 7px;
+    color: #3d4f6a;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.2s, background 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-file:hover { border-color: var(--blue); background: #ddeeff; }
+  #mp3file { display: none; }
+  .song-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: #7a8fa8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .song-name.changed { color: #1a7a40; font-weight: 600; }
+
+  /* Action buttons */
+  .btn-row { display: flex; gap: 10px; margin-top: 6px; direction: ltr; }
+  .btn-primary, .btn-secondary {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  }
+  .btn-primary:active, .btn-secondary:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(230,57,70,0.3);
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-secondary {
+    background: #e8f0ff;
+    color: #1a5ab8;
+    border: 1px solid #b8ccee;
+    box-shadow: 0 2px 6px rgba(66,153,225,0.15);
+  }
+  .btn-secondary:hover:not(:disabled) { background: #d4e4ff; }
+  .btn-secondary:disabled {
+    background: #eef0f4;
+    color: #a8b4c4;
+    border-color: #d8dfe8;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* ══════════════════════════════════════
+     LOGS TAB — dark, English
+  ══════════════════════════════════════ */
+  #tab-logs {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+  #tab-logs.active { display: flex; }
+
+  .log-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .log-count {
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .btn-clear {
+    padding: 6px 14px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-clear:hover { border-color: var(--accent); color: var(--accent); }
+
+  .log-legend {
+    display: flex;
+    gap: 14px;
+    padding: 6px 16px;
+    background: #0e1420;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: #8899aa;
+  }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  #logBox {
+    flex: 1;
+    overflow-y: auto;
+    background: #080c14;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    padding: 10px 14px;
+    scroll-behavior: smooth;
+  }
+  #logBox::-webkit-scrollbar { width: 6px; }
+  #logBox::-webkit-scrollbar-track { background: #0a0e18; }
+  #logBox::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }
+
+  .log-entry {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid #0e1624;
+    line-height: 1.55;
+    font-weight: 500;
+  }
+  .log-time { color: #5a7090; flex-shrink: 0; font-weight: 400; }
+  .log-msg  { word-break: break-word; }
+
+  .log-check      .log-msg  { color: #5a8870; }
+  .log-check      .log-time { color: #3a5848; }
+  .log-info       .log-msg  { color: #7ee8a2; font-weight: 600; }
+  .log-action     .log-msg  { color: #7dc8f8; font-weight: 600; }
+  .log-alert-other .log-msg { color: #f4a24a; font-weight: 700; }
+  .log-alert-mine  .log-msg {
+    color: #ff5555;
+    font-weight: 800;
+    font-size: 14px;
+    text-shadow: 0 0 8px rgba(255,80,80,0.4);
+  }
+  .log-alert-mine {
+    background: rgba(230,57,70,0.10);
+    border-radius: 4px;
+    padding: 4px 6px;
+    border-left: 3px solid #ff5555;
+  }
+  .log-error .log-msg { color: #ff9090; font-weight: 700; }
+
+  /* ══════════════════════════════════════
+     MAP TAB (פיקוד העורף webview)
+  ══════════════════════════════════════ */
+  .map-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .map-toolbar span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .map-toolbar .map-hint {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .btn-refresh {
+    margin-left: auto;
+    padding: 6px 14px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-refresh:hover { border-color: var(--blue); color: var(--blue); }
+
+  #mapView {
+    flex: 1;
+    width: 100%;
+    border: none;
+  }
+
+  /* ══════════════════════════════════════
+     REAL MAP TAB (מפה)
+  ══════════════════════════════════════ */
+  #tab-map {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+  #tab-map.active { display: flex; }
+
+  .map-real-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .map-real-toolbar span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  #mapAlertBadge {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    border-radius: 10px;
+    padding: 2px 10px;
+    display: none;
+  }
+  #mapAlertBadge.visible { display: inline-block; }
+  #mapNoAlerts {
+    font-size: 12px;
+    color: var(--success);
+    font-weight: 600;
+  }
+  #mapContainer {
+    flex: 1;
+    width: 100%;
+  }
+
+  @keyframes pulse-dot {
+    0%   { transform: scale(1);   opacity: 1; }
+    50%  { transform: scale(1.5); opacity: 0.6; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+  .alert-pulse {
+    animation: pulse-dot 1.2s ease-in-out infinite;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-icon">🚨</div>
+  <div>
+    <div class="header-title">Music Alert</div>
+    <div class="header-sub">מערכת ניטור פיקוד העורף</div>
+  </div>
+  <div class="status-dot">
+    <div class="dot"></div>
+    <span>מנטר</span>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="settings" onclick="switchTab('settings')">⚙️ הגדרות</button>
+  <button class="tab-btn" data-tab="map" onclick="switchTab('map')">🗺️ מפה</button>
+  <button class="tab-btn" data-tab="pikud" onclick="switchTab('pikud')">🏛️ פיקוד העורף</button>
+  <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')">
+    📋 Logs
+    <span id="logBadge" class="badge"></span>
+  </button>
+</div>
+
+<!-- ── הגדרות Tab ── -->
+<div id="tab-settings" class="tab-content active">
+
+  <div class="section">
+    <div class="section-title">🏙️ ניטור</div>
+    <label>העיר שלך (בעברית)</label>
+    <input type="text" id="city" placeholder="לדוגמה: עכו">
+  </div>
+
+  <div class="section">
+    <div class="section-title">🔊 רמקול Chromecast</div>
+    <label>סריקת מכשירים</label>
+    <div class="scan-row">
+      <select id="deviceSelect">
+        <option value="">— לחץ סרוק לחיפוש מכשירים —</option>
+      </select>
+      <button class="btn-scan" id="scanBtn" onclick="scanDevices()">
+        <div class="spinner"></div>
+        <span id="scanBtnText">סרוק</span>
+      </button>
+    </div>
+    <div id="scanHint" class="scan-hint">מחפש מכשירי Cast ברשת (4 שניות)</div>
+    <label>IP רמקול (ידני / אוטומטי)</label>
+    <input type="text" id="speaker" placeholder="לדוגמה: 192.168.1.50">
+  </div>
+
+  <div class="section">
+    <div class="section-title">💻 המחשב שלי</div>
+    <label>IP המחשב (זוהה אוטומטית, לקריאה בלבד)</label>
+    <input type="text" id="computer" readonly>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🎵 שמע</div>
+    <label>צליל אזעקה</label>
+    <div class="mp3-row">
+      <button class="btn-file" onclick="document.getElementById('mp3file').click()">
+        📂 בחר MP3
+      </button>
+      <span class="song-name" id="songName">🎵 baby_shark.mp3 (ברירת מחדל)</span>
+    </div>
+    <input type="file" id="mp3file" accept=".mp3">
+    <label>עוצמת קול</label>
+    <div class="vol-row">
+      <input type="range" id="volume" min="0" max="1" step="0.05"
+             oninput="document.getElementById('volVal').textContent = Math.round(this.value * 100) + '%'">
+      <span class="vol-val" id="volVal">50%</span>
+    </div>
+    <label>משך הנגינה (ms)</label>
+    <input type="number" id="songDuration" min="5000" step="1000" placeholder="60000">
+  </div>
+
+  <div class="section">
+    <div class="section-title">🕐 שעות פעילות</div>
+    <div class="hours-row">
+      <div>
+        <label>שעת התחלה (0–23)</label>
+        <input type="number" id="startHour" min="0" max="23" placeholder="0">
+      </div>
+      <div>
+        <label>שעת סיום (0–23)</label>
+        <input type="number" id="endHour" min="0" max="23" placeholder="23">
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-primary" onclick="save()">💾 שמור הגדרות</button>
+    <button class="btn-secondary" id="testBtn" onclick="testSound()" disabled>🔊 בדיקת צליל</button>
+  </div>
+
+</div>
+
+<!-- ── מפה Tab ── -->
+<div id="tab-map" class="tab-content">
+  <div class="map-real-toolbar">
+    <span>🗺️ מפת אזעקות חיה</span>
+    <span id="mapNoAlerts">✅ אין אזעקות פעילות</span>
+    <span id="mapAlertBadge"></span>
+  </div>
+  <div id="mapContainer"></div>
+</div>
+
+<!-- ── פיקוד העורף Tab ── -->
+<div id="tab-pikud" class="tab-content">
+  <div class="map-toolbar">
+    <span>🏛️ פיקוד העורף</span>
+    <span class="map-hint">— אתר הרשמי</span>
+    <button class="btn-refresh" onclick="document.getElementById('mapView').reload()">↻ רענן</button>
+  </div>
+  <webview id="mapView"
+    src="https://www.oref.org.il/12481-he/Pakar.aspx"
+    style="flex:1; width:100%; border:none;"
+    allowpopups>
+  </webview>
+</div>
+
+<!-- ── Logs Tab ── -->
+<div id="tab-logs" class="tab-content">
+  <div class="log-toolbar">
+    <span style="font-size:13px; font-weight:600;">Live Log</span>
+    <span class="log-count" id="logCount">0 entries</span>
+    <button class="btn-clear" onclick="clearLogs()">Clear</button>
+  </div>
+  <div class="log-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#5a8870"></div>Check (quiet)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7dc8f8"></div>Action</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7ee8a2"></div>Info</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f4a24a"></div>Alert (other area)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff5555"></div>Alert (YOUR city!)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff9090"></div>Error</div>
+  </div>
+  <div id="logBox"></div>
+</div>
+
+<script src="cities_coords.js"></script>
+<script src="renderer.js"></script>
+</body>
+</html>
