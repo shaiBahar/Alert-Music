@@ -5,7 +5,25 @@ const fs = require("fs");
 const { Client, DefaultMediaReceiver } = require("castv2-client");
 const express = require("express");
 
-const userMusicPath = electronApp.getPath("userData");
+const userMusicPath = path.join(electronApp.getPath("appData"), "MusicAlert");
+console.log("[MusicAlert] userMusicPath:", userMusicPath);
+
+// ── Copy default song to userData so Express can serve it ───
+(function ensureDefaultSong() {
+  const dst = path.join(userMusicPath, "baby_shark.mp3");
+  if (!fs.existsSync(dst)) {
+    const candidates = [
+      path.join(process.resourcesPath || "", "baby_shark.mp3"), // packaged
+      path.join(__dirname, "baby_shark.mp3")                    // dev
+    ];
+    for (const src of candidates) {
+      if (fs.existsSync(src)) {
+        try { fs.copyFileSync(src, dst); } catch (e) {}
+        break;
+      }
+    }
+  }
+})();
 
 let alertPlaying = false;
 let lastAlertId = null;
@@ -13,16 +31,30 @@ let lastAlertId = null;
 // ── Express music server ────────────────────────────────────
 const musicApp = express();
 
-// Serve files with no-cache headers to prevent stale audio on Chromecast
-musicApp.use("/music", (req, res, next) => {
+// Serve audio files directly (avoids express.static asar issues)
+musicApp.get("/music/:file", (req, res) => {
+  const filePath = path.join(userMusicPath, req.params.file);
+  console.log("[MusicAlert] GET /music/" + req.params.file + " → " + filePath + " exists:" + fs.existsSync(filePath));
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("Not found: " + filePath);
+  }
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-  next();
-}, express.static(userMusicPath, { etag: false, lastModified: false }));
+  res.sendFile(filePath);
+});
 
-musicApp.listen(3000, () => {
+
+const server = musicApp.listen(3000, () => {
   console.log("Music server running on port 3000");
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error("Port 3000 already in use — another instance may be running.");
+  } else {
+    console.error("Music server error:", err.message);
+  }
 });
 
 // ── Playback ────────────────────────────────────────────────
@@ -31,6 +63,13 @@ function playMusic(config, log, force = false) {
   if (alertPlaying && !force) return;
 
   alertPlaying = true;
+
+  let song = "baby_shark.mp3";
+  const customSong = path.join(userMusicPath, "alarm.mp3");
+  if (fs.existsSync(customSong)) song = "alarm.mp3";
+
+  const contentId   = `http://${config.computer_ip}:3000/music/${song}?t=${Date.now()}`;
+  const contentType = "audio/mp3";
 
   const client = new Client();
 
@@ -51,16 +90,9 @@ function playMusic(config, log, force = false) {
 
       client.setVolume({ level: parseFloat(config.volume) || 0.5 }, () => {});
 
-      // Determine which song file to play
-      let song = "baby_shark.mp3";
-      const customSong = path.join(userMusicPath, "alarm.mp3");
-      if (fs.existsSync(customSong)) {
-        song = "alarm.mp3";
-      }
-
       const media = {
-        contentId: `http://${config.computer_ip}:3000/music/${song}?t=${Date.now()}`,
-        contentType: "audio/mp3",
+        contentId,
+        contentType,
         streamType: "BUFFERED"
       };
 

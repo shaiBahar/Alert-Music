@@ -12,6 +12,7 @@
   "electron-builder": "^24.0.0"
  },
  "dependencies": {
+  "@distube/ytdl-core": "^4.16.12",
   "bonjour": "^3.5.0",
   "castv2-client": "^1.2.0",
   "express": "^4.0.0"
@@ -19,6 +20,9 @@
  "build": {
   "appId": "music.alert",
   "productName": "MusicAlert",
+  "extraResources": [
+   { "from": "baby_shark.mp3", "to": "baby_shark.mp3" }
+  ],
   "win": {
    "target": "nsis"
   }

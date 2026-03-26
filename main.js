@@ -3,6 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+// Force consistent userData path for both dev (npm start) and packaged exe
+app.setPath("userData", path.join(app.getPath("appData"), "MusicAlert"));
+
 const service = require("./service");
 
 const configPath = path.join(app.getPath("userData"), "config.json");
@@ -74,6 +77,20 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// ── Single instance lock ─────────────────────────────────────
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // Another instance is already running — focus it and quit this one
+  app.quit();
+}
+
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 app.whenReady().then(() => {
   app.setLoginItemSettings({ openAtLogin: true });
